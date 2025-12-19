@@ -590,4 +590,531 @@ public class GameFrame extends JFrame {
         });
         t.start();
     }
+
+    private void finishTurn(Player p) {
+        // Cek apakah sudah mencapai finish
+        if (p.getPosition() >= 64) {
+            showFinalResults();
+            return;
+        }
+
+        // CEK KELIPATAN 5 (DOUBLE TURN)
+        if (p.getPosition() % 5 == 0) {
+            new MarioToast(this,  p.getName() + " gets DOUBLE TURN!", 2000);
+            isAnimating = false;
+            rollButton.setEnabled(true);
+            return;
+        }
+        // Kalau bukan kelipatan 5, ganti giliran normal
+        isAnimating = false;
+        rollButton.setEnabled(true);
+        nextTurn();
+    }
+
+
+    private void showFinalResults() {
+        PriorityQueue<Player> finalRanking = new PriorityQueue<>((a, b) -> {
+            int scoreCompare = Integer.compare(b.getTotalScore(), a.getTotalScore());
+            if (scoreCompare != 0) return scoreCompare;
+            return Integer.compare(b.getPosition(), a.getPosition());
+        });
+
+        finalRanking.addAll(players);
+        int[] rankingPoints = {5, 3, 1};
+
+        StringBuilder result = new StringBuilder();
+        int rank = 1;
+        Player winner = null;
+
+        while (!finalRanking.isEmpty()) {
+            Player p = finalRanking.poll();
+            int extraPoints = 0;
+            if (rank <= rankingPoints.length) {
+                extraPoints = rankingPoints[rank - 1];
+                p.addBonusPoints(extraPoints);
+            }
+
+            if (rank == 1) {
+                winner = p;
+                result.append("🏆 WINNER ");
+            } else if (rank == 2) {
+                result.append("🥈 2nd ");
+            } else if (rank == 3) {
+                result.append("🥉 3rd ");
+            } else {
+                result.append(rank).append(". ");
+            }
+
+            int collectedBonus = p.getBonusPoints() - extraPoints;
+            result.append(p.getName())
+                    .append("\n   Pos: ").append(p.getPosition())
+                    .append(" | Bonus: ").append(collectedBonus)
+                    .append("\n\n");
+
+            PlayerStats.recordScore(p.getName(), p.getTotalScore());
+            rank++;
+        }
+
+        if (winner != null) {
+            PlayerStats.recordWin(winner.getName(), winner.getTotalScore());
+        }
+
+        // Stop Music
+        Main.soundManager.stopMusic();
+
+        Main.soundManager.playSFX("/Audio/end.wav");
+
+        // TAMPILKAN CUSTOM POPUP
+        showCustomResultDialog(result.toString(), winner);
+    }
+
+
+    // REPLACEMENT untuk JOptionPane standar
+    private void showCustomResultDialog(String resultMessage, Player winner) {
+        JDialog dialog = new JDialog(this, "Game Over", true);
+        dialog.setUndecorated(true);
+        dialog.setBackground(new Color(0,0,0,0)); // Transparan
+
+        // Panel Utama Style Mario Box
+        JPanel mainPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                int w = getWidth();
+                int h = getHeight();
+
+                // 1. Shadow Background
+                g2d.setColor(new Color(0, 0, 0, 80));
+                g2d.fillRoundRect(10, 10, w-10, h-10, 30, 30);
+
+                // 2. Main Box (Gradient Emas/Kuning)
+                GradientPaint gp = new GradientPaint(0, 0, new Color(255, 248, 220), 0, h, new Color(255, 239, 186));
+                g2d.setPaint(gp);
+                g2d.fillRoundRect(0, 0, w-10, h-10, 30, 30);
+
+                // 3. Border Coklat Tebal
+                g2d.setColor(new Color(160, 120, 90));
+                g2d.setStroke(new BasicStroke(5));
+                g2d.drawRoundRect(2, 2, w-14, h-14, 30, 30);
+
+                // 4. Dot Decoration (Pojok-pojok)
+                g2d.setColor(new Color(139, 69, 19, 100));
+                g2d.fillOval(15, 15, 10, 10);
+                g2d.fillOval(w-35, 15, 10, 10);
+                g2d.fillOval(15, h-35, 10, 10);
+                g2d.fillOval(w-35, h-35, 10, 10);
+            }
+        };
+        mainPanel.setLayout(new BorderLayout());
+        mainPanel.setBorder(new EmptyBorder(30, 40, 30, 40)); // Padding dalam
+
+        // === HEADER: WINNER ===
+        JLabel titleLabel = new JLabel("GAME OVER!", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 36));
+        titleLabel.setForeground(new Color(139, 69, 19)); // Coklat Mario
+
+        // === CONTENT: RANKING LIST ===
+        JTextArea resultArea = new JTextArea(resultMessage);
+        resultArea.setFont(new Font("Monospaced", Font.BOLD, 16));
+        resultArea.setForeground(new Color(80, 40, 0));
+        resultArea.setEditable(false);
+        resultArea.setOpaque(false); // Transparan agar warna background panel terlihat
+        resultArea.setMargin(new Insets(20, 10, 20, 10));
+
+        // ScrollPane transparan
+        JScrollPane scroll = new JScrollPane(resultArea);
+        scroll.setOpaque(false);
+        scroll.getViewport().setOpaque(false);
+        scroll.setBorder(null);
+        scroll.setPreferredSize(new Dimension(400, 250));
+
+        // === BUTTON PANEL ===
+        JPanel btnPanel = new JPanel();
+        btnPanel.setOpaque(false);
+        btnPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 20, 10));
+
+        // Tombol Play Again
+        JButton playAgainBtn = createMarioButton("PLAY AGAIN", new Color(170, 216, 152));
+        playAgainBtn.addActionListener(e -> {
+            dialog.dispose();
+            restartGame();
+        });
+
+        // Tombol Exit
+        JButton exitBtn = createMarioButton("EXIT", new Color(255, 120, 120));
+        exitBtn.addActionListener(e -> System.exit(0));
+
+        btnPanel.add(playAgainBtn);
+        btnPanel.add(exitBtn);
+
+        mainPanel.add(titleLabel, BorderLayout.NORTH);
+        mainPanel.add(scroll, BorderLayout.CENTER);
+        mainPanel.add(btnPanel, BorderLayout.SOUTH);
+
+        dialog.setContentPane(mainPanel);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
+
+    // Membuat tombol 3D
+    private JButton createMarioButton(String text, Color baseColor) {
+        JButton btn = new JButton(text) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                // Shadow effect
+                g2d.setColor(baseColor.darker().darker());
+                g2d.fillRoundRect(2, 4, getWidth()-4, getHeight()-4, 20, 20);
+
+                // Main button
+                g2d.setColor(baseColor);
+                g2d.fillRoundRect(2, 0, getWidth()-4, getHeight()-6, 20, 20);
+
+                // Text
+                super.paintComponent(g);
+            }
+        };
+        btn.setForeground(Color.WHITE);
+        btn.setFont(new Font("Arial", Font.BOLD, 16));
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        btn.setPreferredSize(new Dimension(140, 50));
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        return btn;
+    }
+
+    private void restartGame() {
+        Main.soundManager.stopMusic();
+        Main.soundManager.stopMovementSound();
+        this.dispose();  //Tutup Window Game
+
+        // Kembali ke Start Screen (Menu Awal)
+        SwingUtilities.invokeLater(() -> {
+            // Panggil method static di Main untuk buka menu
+            Main.createStartScreen();
+
+            // Nyalakan lagi Musik Background Menu
+            Main.soundManager.playBackgroundMusic("/Audio/backsound.wav");
+        });
+    }
+
+    private void nextTurn() {
+        currentPlayerIndex = (currentPlayerIndex + 1) % players.size();
+        updateTurnUI();
+    }
+
+    private boolean isPrime(int n) {
+        if (n <= 1) return false;
+        for (int i = 2; i <= Math.sqrt(n); i++)
+            if (n % i == 0) return false;
+        return true;
+    }
+
+    class DicePanel extends JPanel {
+        private int value = 1;
+
+        public void setDiceValue(int val) {
+            this.value = val;
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2d = (Graphics2D) g;
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int size = Math.min(getWidth(), getHeight()) - 20;
+            int x = (getWidth() - size) / 2;
+            int y = (getHeight() - size) / 2;
+
+            g2d.setColor(new Color(0, 0, 0, 40));
+            g2d.fillRoundRect(x + 5, y + 5, size, size, 15, 15);
+            GradientPaint gradient = new GradientPaint(
+                    x, y, Color.WHITE,
+                    x + size, y + size, new Color(245, 245, 245)
+            );
+
+            g2d.setPaint(gradient);
+            g2d.fillRoundRect(x, y, size, size, 15, 15);
+
+            g2d.setColor(Color.BLACK);
+            drawDots(g2d, value, x, y, size);
+        }
+
+        private void drawDots(Graphics2D g2d, int value, int x, int y, int size) {
+            int dotSize = size / 7;
+            int padding = size / 5;
+            int centerX = x + size / 2;
+            int centerY = y + size / 2;
+            int leftX = x + padding;
+            int rightX = x + size - padding - dotSize;
+            int topY = y + padding;
+            int bottomY = y + size - padding - dotSize;
+
+            switch (value) {
+                case 1:
+                    fillDot(g2d, centerX - dotSize / 2, centerY - dotSize / 2, dotSize);
+                    break;
+                case 2:
+                    fillDot(g2d, leftX, topY, dotSize);
+                    fillDot(g2d, rightX, bottomY, dotSize);
+                    break;
+                case 3:
+                    fillDot(g2d, leftX, topY, dotSize);
+                    fillDot(g2d, centerX - dotSize / 2, centerY - dotSize / 2, dotSize);
+                    fillDot(g2d, rightX, bottomY, dotSize);
+                    break;
+                case 4:
+                    fillDot(g2d, leftX, topY, dotSize);
+                    fillDot(g2d, rightX, topY, dotSize);
+                    fillDot(g2d, leftX, bottomY, dotSize);
+                    fillDot(g2d, rightX, bottomY, dotSize);
+                    break;
+                case 5:
+                    fillDot(g2d, leftX, topY, dotSize);
+                    fillDot(g2d, rightX, topY, dotSize);
+                    fillDot(g2d, centerX - dotSize / 2, centerY - dotSize / 2, dotSize);
+                    fillDot(g2d, leftX, bottomY, dotSize);
+                    fillDot(g2d, rightX, bottomY, dotSize);
+                    break;
+                case 6:
+                    fillDot(g2d, leftX, topY, dotSize);
+                    fillDot(g2d, rightX, topY, dotSize);
+                    fillDot(g2d, leftX, centerY - dotSize / 2, dotSize);
+                    fillDot(g2d, rightX, centerY - dotSize / 2, dotSize);
+                    fillDot(g2d, leftX, bottomY, dotSize);
+                    fillDot(g2d, rightX, bottomY, dotSize);
+                    break;
+            }
+        }
+
+        private void fillDot(Graphics2D g2d, int x, int y, int size) {
+            g2d.fillOval(x, y, size, size);
+        }
+    }
+
+    class RoundedButton extends JButton {
+        private Color baseColor = new Color(255, 120, 120); // Merah Soft
+        private Color hoverColor = new Color(255, 150, 150);
+        private Color pressedColor = new Color(230, 100, 100);
+        private boolean isHovered = false;
+        private boolean isPressed = false;
+
+        public void setBaseColor(Color color) {
+            this.baseColor = color;
+            this.hoverColor = color.darker();
+            this.pressedColor = color.darker().darker();
+            repaint();
+        }
+
+        public RoundedButton(String text) {
+            super(text);
+            setContentAreaFilled(false);
+            setFocusPainted(false);
+            setBorderPainted(false);
+            setFont(new Font("Arial", Font.BOLD, 16));
+            setForeground(Color.WHITE);
+
+            addMouseListener(new java.awt.event.MouseAdapter() {
+                public void mouseEntered(java.awt.event.MouseEvent evt) {
+                    isHovered = true;
+                    repaint();
+                }
+
+                public void mouseExited(java.awt.event.MouseEvent evt) {
+                    isHovered = false;
+                    repaint();
+                }
+
+                public void mousePressed(java.awt.event.MouseEvent evt) {
+                    isPressed = true;
+                    repaint();
+                }
+
+                public void mouseReleased(java.awt.event.MouseEvent evt) {
+                    isPressed = false;
+                    repaint();
+                }
+            });
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2d = (Graphics2D) g;
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int width = getWidth();
+            int height = getHeight();
+
+            g2d.setColor(new Color(0, 0, 0, 80));
+            g2d.fillRoundRect(3, 5, width - 6, height - 3, 25, 25);
+            Color currentColor = isPressed ? pressedColor : (isHovered ? hoverColor : baseColor);
+            GradientPaint gradient = new GradientPaint(
+                    0, 0, currentColor,
+                    0, height, currentColor.darker()
+            );
+            g2d.setPaint(gradient);
+
+            int offsetY = isPressed ? 3 : 0;
+            g2d.fillRoundRect(0, offsetY, width - 6, height - 6, 25, 25);
+            g2d.setColor(new Color(255, 255, 255, 60));
+            g2d.fillRoundRect(5, offsetY + 2, width - 16, height / 2 - 4, 20, 20);
+
+            super.paintComponent(g);
+        }
+    }
+
+    private void restartGameQuick() {
+        // Reset semua pemain ke posisi awal
+        for (Player player : players) {
+            player.setPosition(1);
+            player.setBonusPoints(0);
+        }
+
+        // Reset board (bonus points baru)
+        board = new Board();
+        boardPanel.setBoard(board);
+
+        // Reset game state
+        currentPlayerIndex = 0;
+        isAnimating = false;
+        canClimbCurrentTurn = false;
+
+        // Refresh UI
+        updateTurnUI();
+        boardPanel.repaint();
+        refreshPlayerList();
+
+        rollButton.setEnabled(true);
+        diceInfoLabel.setText("Giliranmu!");
+        diceInfoLabel.setForeground(Color.WHITE);
+    }
+
+    private void showExitConfirmation() {
+        JDialog dialog = new JDialog(this, "Exit Game", true);
+        dialog.setUndecorated(true);
+        dialog.setBackground(new Color(0,0,0,0));
+
+        JPanel mainPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2d = (Graphics2D) g;
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                // Shadow
+                g2d.setColor(new Color( 160, 120, 90));
+                g2d.fillRoundRect(10, 10, getWidth()-10, getHeight()-10, 30, 30);
+
+                // Main Box (Emas)
+                GradientPaint gp = new GradientPaint(0, 0, new Color(255, 248, 220), 0, getHeight(), new Color(255, 239, 186));
+                g2d.setPaint(gp);
+                g2d.fillRoundRect(0, 0, getWidth()-10, getHeight()-10, 30, 30);
+
+                // Border Coklat
+                g2d.setColor(new Color(139, 69, 19));
+                g2d.setStroke(new BasicStroke(5));
+                g2d.drawRoundRect(2, 2, getWidth()-14, getHeight()-14, 30, 30);
+            }
+        };
+        mainPanel.setLayout(new BorderLayout());
+        mainPanel.setBorder(new EmptyBorder(30, 40, 30, 40));
+
+        // Title
+        JLabel titleLabel = new JLabel("Exit Game?", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 28));
+        titleLabel.setForeground(new Color(139, 69, 19));
+
+        // Message
+        JLabel msgLabel = new JLabel("Are you sure?", SwingConstants.CENTER);
+        msgLabel.setFont(new Font("Arial", Font.PLAIN, 18));
+        msgLabel.setForeground(new Color(80, 40, 0));
+
+        JPanel centerPanel = new JPanel();
+        centerPanel.setLayout(new BoxLayout(centerPanel, BoxLayout.Y_AXIS));
+        centerPanel.setOpaque(false);
+        titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        msgLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        centerPanel.add(titleLabel);
+        centerPanel.add(Box.createRigidArea(new Dimension(0, 15)));
+        centerPanel.add(msgLabel);
+
+        // Buttons Panel
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 10));
+        btnPanel.setOpaque(false);
+
+        JButton yesBtn = createMarioButton("YES", new Color(135, 169, 107));
+        yesBtn.addActionListener(e -> System.exit(0));
+
+        JButton noBtn = createMarioButton("NO", new Color(255, 120, 120));
+        noBtn.addActionListener(e -> dialog.dispose());
+
+        btnPanel.add(yesBtn);
+        btnPanel.add(noBtn);
+
+        mainPanel.add(centerPanel, BorderLayout.CENTER);
+        mainPanel.add(btnPanel, BorderLayout.SOUTH);
+
+        dialog.setContentPane(mainPanel);
+
+        // PERBESAR UKURAN DIALOG
+        dialog.setSize(400, 220);
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
+
+
+
+    class MarioToast extends JWindow {
+
+        public MarioToast(JFrame parent, String message, int durationMillis) {
+            super(parent);
+
+            JPanel panel = new JPanel() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2d = (Graphics2D) g;
+                    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                    g2d.setColor(new Color(0, 0, 0, 180));
+                    g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+
+                    g2d.setColor(new Color(255,  223, 186));
+                    g2d.setStroke(new BasicStroke(2));
+                    g2d.drawRoundRect(1, 1, getWidth()-2, getHeight()-2, 20, 20);
+                }
+            };
+
+            panel.setLayout(new BorderLayout());
+            panel.setBorder(new EmptyBorder(10, 20, 10, 20));
+            panel.setBackground(new Color(0,0,0,0));
+
+            JLabel label = new JLabel(message);
+            label.setForeground(Color.WHITE);
+            label.setFont(new Font("Arial", Font.BOLD, 16));
+            label.setIconTextGap(10);
+            label.setText(message);
+            panel.add(label, BorderLayout.CENTER);
+            getContentPane().add(panel);
+
+            pack();
+            setLocationRelativeTo(parent);
+            Point loc = getLocation();
+            setLocation(loc.x, loc.y + 50);
+            setBackground(new Color(0,0,0,0));
+            javax.swing.Timer timer = new javax.swing.Timer(durationMillis, e -> {
+                setVisible(false);
+                dispose();
+            });
+            timer.setRepeats(false);
+            timer.start();
+            setVisible(true);
+        }
+    }
 }
