@@ -255,8 +255,6 @@ public class Main {
             centerPanel.add(tf);
         }
 
-
-
         Mario3DButton goBtn = new Mario3DButton("START GAME");
         goBtn.setBounds(100, startY + (totalPlayers * 60) + 20, 200, 50);
         goBtn.addActionListener(ev -> {
@@ -266,7 +264,7 @@ public class Main {
                 names.add(val.isEmpty() ? "Unknown" : val);
             }
             dialog.dispose();
-            // new GameFrame(names);
+            new GameFrame(names);
         });
         centerPanel.add(goBtn);
 
